@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Classificador de Doenças da Bananeira</title>
+
+    <link rel="stylesheet" href="style.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+</head>
+
+<body>
+    <main class="container">
+        <h1>Doenças da Bananeira</h1>
+
+        <p class="descricao">
+            Selecione uma fotografia de uma folha de bananeira para realizar
+            a classificação.
+        </p>
+
+        <label for="imagemInput" class="botao-selecionar">
+            Selecionar imagem
+        </label>
+
+        <input
+            type="file"
+            id="imagemInput"
+            accept="image/*"
+            capture="environment"
+        >
+
+        <img
+            id="preview"
+            alt="Imagem selecionada para classificação"
+        >
+
+        <button id="classificarButton" disabled>
+            Classificar imagem
+        </button>
+
+        <p id="status">Carregando o modelo...</p>
+
+        <section id="resultado" class="resultado oculto">
+            <h2>Resultado</h2>
+
+            <p class="nome-classe" id="classePrevista"></p>
+
+            <p>
+                Confiança:
+                <strong id="confianca"></strong>
+            </p>
+        </section>
+
+        <p class="aviso">
+            Resultado experimental. A classificação não substitui a avaliação
+            de um profissional da área agrícola.
+        </p>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>

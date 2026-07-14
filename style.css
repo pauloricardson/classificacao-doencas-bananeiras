@@ -1,0 +1,103 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    padding: 20px;
+    background: #eef4ed;
+    color: #263326;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.container {
+    width: 100%;
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 24px;
+    background: #ffffff;
+    border-radius: 18px;
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.12);
+    text-align: center;
+}
+
+h1 {
+    margin-top: 0;
+    color: #24632c;
+}
+
+.descricao {
+    margin-bottom: 24px;
+    line-height: 1.5;
+    color: #536153;
+}
+
+#imagemInput {
+    display: none;
+}
+
+.botao-selecionar,
+#classificarButton {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.botao-selecionar {
+    background: #dfeede;
+    color: #245d29;
+}
+
+#classificarButton {
+    margin-top: 18px;
+    background: #2d7b35;
+    color: white;
+}
+
+#classificarButton:disabled {
+    background: #a4b3a5;
+    cursor: not-allowed;
+}
+
+#preview {
+    display: none;
+    width: 100%;
+    max-height: 360px;
+    margin-top: 22px;
+    border-radius: 12px;
+    object-fit: contain;
+}
+
+#status {
+    margin-top: 18px;
+    color: #576457;
+}
+
+.resultado {
+    margin-top: 22px;
+    padding: 18px;
+    background: #f1f8f0;
+    border-radius: 12px;
+}
+
+.nome-classe {
+    font-size: 1.25rem;
+    font-weight: bold;
+    color: #23632b;
+}
+
+.oculto {
+    display: none;
+}
+
+.aviso {
+    margin-top: 25px;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: #737d73;
+}
