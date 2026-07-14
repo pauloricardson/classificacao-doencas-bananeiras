@@ -11,30 +11,71 @@ const confiancaElemento = document.getElementById("confianca");
 
 async function carregarAplicacao() {
     try {
-        statusElemento.textContent = "Carregando o modelo...";
-
-        const [modeloCarregado, respostaClasses] = await Promise.all([
-            tf.loadLayersModel("./modelo/model.json"),
-            fetch("./modelo/classes.json")
-        ]);
-
-        if (!respostaClasses.ok) {
-            throw new Error("Não foi possível carregar o classes.json.");
+        if (typeof tf === "undefined") {
+            throw new Error(
+                "TensorFlow.js não foi carregado. Verifique o index.html."
+            );
         }
 
-        modelo = modeloCarregado;
+        statusElemento.textContent = "Carregando as classes...";
+
+        const respostaClasses = await fetch("./modelo/classes.json");
+
+        if (!respostaClasses.ok) {
+            throw new Error(
+                `Erro ao carregar classes.json: ${respostaClasses.status}`
+            );
+        }
+
         classes = await respostaClasses.json();
 
-        console.log("Entrada do modelo:", modelo.inputs[0].shape);
-        console.log("Classes:", classes);
+        console.log("Classes carregadas:", classes);
+
+        if (!Array.isArray(classes) || classes.length === 0) {
+            throw new Error(
+                "O arquivo classes.json está vazio ou possui formato inválido."
+            );
+        }
+
+        statusElemento.textContent =
+            "Classes carregadas. Baixando o modelo...";
+
+        modelo = await tf.loadLayersModel(
+            "./modelo/model.json",
+            {
+                onProgress: function (progresso) {
+                    const percentual = Math.round(progresso * 100);
+
+                    statusElemento.textContent =
+                        `Carregando o modelo: ${percentual}%`;
+                }
+            }
+        );
+
+        console.log("Modelo carregado:", modelo);
+        console.log("Entrada:", modelo.inputs[0].shape);
+        console.log("Saída:", modelo.outputs[0].shape);
+
+        const quantidadeSaidas = modelo.outputs[0].shape[1];
+
+        if (classes.length !== quantidadeSaidas) {
+            throw new Error(
+                `O modelo possui ${quantidadeSaidas} saídas, ` +
+                `mas classes.json possui ${classes.length} classes.`
+            );
+        }
 
         statusElemento.textContent =
             "Modelo carregado. Selecione uma imagem.";
+
+        if (preview.src) {
+            classificarButton.disabled = false;
+        }
     } catch (erro) {
-        console.error(erro);
+        console.error("Erro no carregamento:", erro);
 
         statusElemento.textContent =
-            "Erro ao carregar o modelo. Verifique os arquivos do projeto.";
+            `Erro ao carregar: ${erro.message}`;
     }
 }
 
@@ -46,7 +87,10 @@ imagemInput.addEventListener("change", function (evento) {
     }
 
     if (!arquivo.type.startsWith("image/")) {
-        statusElemento.textContent = "Selecione um arquivo de imagem válido.";
+        statusElemento.textContent =
+            "Selecione um arquivo de imagem válido.";
+
+        classificarButton.disabled = true;
         return;
     }
 
@@ -58,10 +102,26 @@ imagemInput.addEventListener("change", function (evento) {
         preview.style.display = "block";
         resultadoElemento.classList.add("oculto");
 
-        classificarButton.disabled = modelo === null;
+        if (modelo) {
+            classificarButton.disabled = false;
+
+            statusElemento.textContent =
+                "Imagem selecionada. Toque em classificar.";
+        } else {
+            classificarButton.disabled = true;
+
+            statusElemento.textContent =
+                "Imagem selecionada. Aguarde o carregamento do modelo.";
+        }
+    };
+
+    preview.onerror = function () {
+        URL.revokeObjectURL(enderecoTemporario);
 
         statusElemento.textContent =
-            "Imagem selecionada. Toque em classificar.";
+            "Não foi possível abrir a imagem selecionada.";
+
+        classificarButton.disabled = true;
     };
 
     preview.src = enderecoTemporario;
@@ -70,40 +130,76 @@ imagemInput.addEventListener("change", function (evento) {
 classificarButton.addEventListener("click", classificarImagem);
 
 async function classificarImagem() {
-    if (!modelo || !preview.src) {
+    if (!modelo) {
+        statusElemento.textContent =
+            "O modelo ainda não foi carregado.";
+
+        return;
+    }
+
+    if (!preview.src) {
+        statusElemento.textContent =
+            "Selecione uma imagem antes de classificar.";
+
         return;
     }
 
     classificarButton.disabled = true;
     statusElemento.textContent = "Analisando a imagem...";
 
+    let predicao = null;
+
     try {
-        const predicao = tf.tidy(() => {
-            const altura = modelo.inputs[0].shape[1];
-            const largura = modelo.inputs[0].shape[2];
+        predicao = tf.tidy(() => {
+            const formatoEntrada = modelo.inputs[0].shape;
+
+            const altura = formatoEntrada[1];
+            const largura = formatoEntrada[2];
+
+            if (!altura || !largura) {
+                throw new Error(
+                    "Não foi possível identificar o tamanho de entrada do modelo."
+                );
+            }
 
             let tensor = tf.browser.fromPixels(preview, 3);
 
             tensor = tf.image.resizeBilinear(
                 tensor,
-                [altura, largura]
+                [altura, largura],
+                true
             );
 
             tensor = tensor.toFloat();
 
             /*
-             * Pré-processamento padrão da MobileNetV2:
-             * pixels de 0–255 são convertidos para -1–1.
+             * Mesmo preprocess_input usado pela MobileNetV2 no treinamento:
+             *
+             * pixel / 127.5 - 1
+             *
+             * Isso converte os pixels de 0–255 para o intervalo -1–1.
              */
             tensor = tensor.div(127.5).sub(1);
 
             tensor = tensor.expandDims(0);
 
-            return modelo.predict(tensor);
+            const resultado = modelo.predict(tensor);
+
+            if (Array.isArray(resultado)) {
+                return resultado[0];
+            }
+
+            return resultado;
         });
 
         const probabilidades = await predicao.data();
-        predicao.dispose();
+
+        if (probabilidades.length !== classes.length) {
+            throw new Error(
+                `A previsão retornou ${probabilidades.length} valores, ` +
+                `mas existem ${classes.length} classes.`
+            );
+        }
 
         let melhorIndice = 0;
 
@@ -113,14 +209,12 @@ async function classificarImagem() {
             }
         }
 
-        const classePrevista = classes[melhorIndice];
+        const classeOriginal = classes[melhorIndice];
+        const classeTraduzida = traduzirClasse(classeOriginal);
         const confianca = probabilidades[melhorIndice] * 100;
 
-        classePrevistaElemento.textContent =
-            traduzirClasse(classePrevista);
-
-        confiancaElemento.textContent =
-            `${confianca.toFixed(2)}%`;
+        classePrevistaElemento.textContent = classeTraduzida;
+        confiancaElemento.textContent = `${confianca.toFixed(2)}%`;
 
         resultadoElemento.classList.remove("oculto");
 
@@ -134,26 +228,41 @@ async function classificarImagem() {
             }))
         );
     } catch (erro) {
-        console.error(erro);
+        console.error("Erro durante a classificação:", erro);
 
         statusElemento.textContent =
-            "Ocorreu um erro durante a classificação.";
+            `Erro durante a classificação: ${erro.message}`;
     } finally {
+        if (predicao) {
+            predicao.dispose();
+        }
+
         classificarButton.disabled = false;
     }
 }
 
 function traduzirClasse(classe) {
     const traducoes = {
-        "Banana Black Sigatoka Disease": "Sigatoka-negra",
+        "Banana Black Sigatoka Disease":
+            "Sigatoka-negra",
+
         "Banana Bract Mosaic Virus Disease":
             "Vírus do mosaico das brácteas",
-        "Banana Healthy Leaf": "Folha saudável",
+
+        "Banana Healthy Leaf":
+            "Folha saudável",
+
         "Banana Insect Pest Disease":
             "Danos causados por insetos",
-        "Banana Moko Disease": "Moko da bananeira",
-        "Banana Panama Disease": "Mal-do-Panamá",
-        "Banana Yellow Sigatoka Disease": "Sigatoka-amarela"
+
+        "Banana Moko Disease":
+            "Moko da bananeira",
+
+        "Banana Panama Disease":
+            "Mal-do-Panamá",
+
+        "Banana Yellow Sigatoka Disease":
+            "Sigatoka-amarela"
     };
 
     return traducoes[classe] || classe;
